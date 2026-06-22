@@ -18,3 +18,5 @@ services:
         fromDatabase:
           name: kali-academy-db
           property: connectionString
+      - key: POSTGRES_SSL
+        value: "no-verify"
