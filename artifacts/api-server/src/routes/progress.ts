@@ -1,36 +1,28 @@
 import { Router } from "express";
-import { db } from "@workspace/db";
-import { progressTable, lessonsTable, modulesTable } from "@workspace/db";
-import { eq, count } from "drizzle-orm";
-import { MarkCompleteBody } from "@workspace/api-zod";
+import { pool } from "@workspace/db";
 
 const router = Router();
 
 router.get("/progress", async (req, res) => {
-  const progress = await db.select().from(progressTable);
-  const result = progress.map((p) => ({
-    ...p,
-    completedAt: p.completedAt.toISOString(),
-  }));
-  res.json(result);
+  try {
+    const result = await pool.query('SELECT * FROM progress');
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post("/progress", async (req, res) => {
-  const parsed = MarkCompleteBody.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
-
-  const { lessonId } = parsed.data;
-
-  const [lesson] = await db.select().from(lessonsTable).where(eq(lessonsTable.id, lessonId));
-  if (!lesson) return res.status(404).json({ error: "Lesson not found" });
-
-  const existing = await db.select().from(progressTable).where(eq(progressTable.lessonId, lessonId));
-  if (existing.length > 0) {
-    return res.status(201).json({ ...existing[0], completedAt: existing[0].completedAt.toISOString() });
+  try {
+    const { lessonId } = req.body;
+    const result = await pool.query(
+      'INSERT INTO progress (lesson_id) VALUES ($1) RETURNING *',
+      [lessonId]
+    );
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
-
-  const [inserted] = await db.insert(progressTable).values({ lessonId }).returning();
-  res.status(201).json({ ...inserted, completedAt: inserted.completedAt.toISOString() });
 });
 
 export default router;
