@@ -17,22 +17,27 @@ export const pool = new Pool({
   idleTimeoutMillis: 30000,
 });
 
-const connectWithRetry = async () => {
+const connectWithRetry = async (): Promise<void> => {
   for (let i = 0; i < 6; i++) {
     try {
       await pool.query('SELECT 1');
       console.log("✅ Database Connected Successfully");
-      return true;
+      return;
     } catch (err: any) {
       console.error(`DB Attempt ${i+1}/6 failed:`, err.message);
-      if (i === 5) throw err;
+      if (i === 5) {
+        console.error("❌ Critical: Failed to connect to database after retries");
+        throw err;
+      }
       await new Promise(r => setTimeout(r, 1500 * (i + 1)));
     }
   }
 };
 
+// Connect on startup
 connectWithRetry().catch(err => {
-  console.error("❌ Critical: Failed to connect to database", err);
+  console.error("❌ Database connection failed critically:", err);
+  // Don't exit in production, let Render restart
 });
 
 export const db = drizzle(pool, { schema });
