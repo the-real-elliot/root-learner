@@ -8,33 +8,31 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be set");
 }
 
-export const pool = new Pool({ 
+export const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  ssl: process.env.NODE_ENV === 'production' 
+    ? { rejectUnauthorized: false } 
+    : false,
+  max: 5,
+  idleTimeoutMillis: 30000,
 });
 
-// Retry logic for Render free tier (cold starts)
-const connectWithRetry = async (retries = 5) => {
-  for (let i = 0; i < retries; i++) {
+const connectWithRetry = async () => {
+  for (let i = 0; i < 6; i++) {
     try {
       await pool.query('SELECT 1');
       console.log("✅ Database Connected Successfully");
-      return;
-    } catch (e: any) {
-      console.log(`❌ DB Connection Attempt ${i+1}/${retries} failed. Retrying...`);
-      if (i === retries - 1) {
-        console.error("❌ All DB connection attempts failed:", e.message);
-        throw e;
-      }
-      await new Promise(r => setTimeout(r, 2000 * (i + 1)));
+      return true;
+    } catch (err: any) {
+      console.error(`DB Attempt ${i+1}/6 failed:`, err.message);
+      if (i === 5) throw err;
+      await new Promise(r => setTimeout(r, 1500 * (i + 1)));
     }
   }
 };
 
-// Connect with retry on startup
 connectWithRetry().catch(err => {
-  console.error("Critical DB failure:", err);
-  process.exit(1);
+  console.error("❌ Critical: Failed to connect to database", err);
 });
 
 export const db = drizzle(pool, { schema });
